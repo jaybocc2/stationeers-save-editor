@@ -1,0 +1,14 @@
+[project]
+description="Python library to edit savegames for Stationeers"
+license = "MIT"
+name = "stationeers_save_editor"
+dependencies = ['xsdata']
+requires-python = ">=3.10"
+dynamic = ["version"]
+
+[build-system]
+requires = ["setuptools>=64", "wheel", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_file = "stationeers_save_editor/_version.py"
