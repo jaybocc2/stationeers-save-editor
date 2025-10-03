@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stationeers Save File Viewer/Editor</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      margin: 0;
+      background: #f8f9fa;
+      height: 100vh;
+    }
+
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .left-column {
+      flex: 1 1 50%;
+      max-width: 50%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .right-column {
+      width: 520px;
+      /* iframe is 500px wide + padding/margin */
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    file-uploader {
+      display: block;
+    }
+
+    iframe-display {
+      display: block;
+    }
+
+    .info,
+    .actions {
+      padding: 15px;
+      background: #ffffff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    input[type="number"] {
+      width: 80px;
+      margin-right: 10px;
+    }
+  </style>
+
+<body>
+  <div class="container">
+    <div class="left-column">
+      <file-uploader></file-uploader>
+      <save-info></save-info>
+    </div>
+
+    <div class="right-column">
+      <iframe-display></iframe-display>
+      <action-panel></action-panel>
+    </div>
+  </div>
+
+  <script type="module" src="https://unpkg.com/lit@3.1.0/index.js?module"></script>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+
+  <script type="module">
+    import {LitElement, html, css} from 'https://unpkg.com/lit@3.1.0/index.js?module';
+    import {unsafeHTML} from 'https://unpkg.com/lit@3.1.0/directives/unsafe-html.js?module';
+
+    function loading(msg) {
+      const div = document.createElement('div');
+      div.style.position = 'fixed';
+      div.style.top = '0';
+      div.style.left = '0';
+      div.style.width = '100%';
+      div.style.height = '100%';
+      div.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+      div.style.color = 'black';
+      div.style.display = 'flex';
+      div.style.alignItems = 'center';
+      div.style.justifyContent = 'center';
+      div.style.fontSize = '1.5em';
+      div.innerText = msg;
+      document.body.appendChild(div);
+      return () => document.body.removeChild(div);
+    }
+
+    const initDone = loading("Initializing Python environment...");
+
+    let pyodideReadyPromise = loadPyodide().then(async (pyodide) => {
+      await pyodide.loadPackage(['micropip']);
+      const micropip = pyodide.pyimport('micropip');
+      await micropip.install('xsdata');
+      await micropip.install('orjson');
+      let response = await fetch('https://cdn.jsdelivr.net/gh/aproposmath/stationeers-save-editor@builds/stationeers_save_editor.zip');
+      let buffer = await response.arrayBuffer();
+      await pyodide.unpackArchive(buffer, "zip");
+      // pyodide.runPython("import shutil; shutil.move('stationeers-save-editor-dev/stationeers_save_editor', 'stationeers_save_editor')");
+      pyodide.pyimport("stationeers_save_editor");
+      initDone();
+      return pyodide;
+    });
+
+    async function updateData() {
+      const pyodide = await pyodideReadyPromise;
+      const result = new TextDecoder().decode(pyodide.runPython('data.get_info_json()').toJs());
+      const data = JSON.parse(result);
+      window.dispatchEvent(new CustomEvent('update-data', {detail: data}));
+    }
+
+    async function downloadData() {
+      const pyodide = await pyodideReadyPromise;
+      pyodide.runPython("data.save('modified.save')");
+      const d = pyodide.FS.readFile('modified.save');
+      const blob = new Blob([d], {type: 'application/octet-stream'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "modified.save";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    class FileUploader extends LitElement {
+      static styles = css`
+    div {
+      border: 2px dashed #888;
+      padding: 20px;
+      text-align: center;
+      background: white;
+      font-size: 1.2em;
+      cursor: pointer;
+      color: #666;
+    }
+    input[disabled] + label {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  `;
+
+      static properties = {
+        pyodideReady: {type: Boolean}
+      };
+
+      constructor() {
+        super();
+        this.pyodideReady = false;
+      }
+
+      connectedCallback() {
+        super.connectedCallback();
+        pyodideReadyPromise.then(() => {
+          this.pyodideReady = true;
+        });
+      }
+
+      render() {
+        return html`
+      <div
+        @click=${() => {
+            this.shadowRoot.getElementById('fileInput').click();
+          }}
+      >
+        Click or drag a .save file here to upload
+        <input
+          id="fileInput"
+          type="file"
+          ?disabled=${!this.pyodideReady}
+          style="display: none"
+          @change="${this.handleFile}"
+        />
+      </div>
+    `;
+      }
+
+      async handleFile(e) {
+        const file = e.target.files[0]; if (file && file.name.endsWith('.save')) {
+          const fileData = await file.arrayBuffer();
+          // Run Python code using Pyodide
+          const pyodide = await pyodideReadyPromise;
+          pyodide.FS.writeFile(file.name, new Uint8Array(fileData));
+          pyodide.runPython(`
+from stationeers_save_editor import SaveData
+data = SaveData("${file.name}")
+`);
+          updateData();
+        } else {alert("Please upload a .save file");}
+      }
+    }
+
+    customElements.define('file-uploader', FileUploader);
+
+    class SaveInfo extends LitElement {
+      static properties = {
+        info: {type: String}
+      };
+
+      connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener('update-data', this.updateInfo.bind(this));
+      }
+
+      updateInfo(e) {
+        this.info = e.detail.info_html;
+      }
+
+      render() {
+        if (!this.info) return html`No save file loaded.`;
+        return unsafeHTML(this.info);
+      }
+    }
+
+    customElements.define('save-info', SaveInfo);
+
+    class IframeDisplay extends LitElement {
+      static properties = {
+        urlBase: {type: String},
+        url: {type: String}
+      };
+      constructor() {
+        super();
+        this.urlBase = 'https://aproposmath.github.io/stationeers-deepmining-map/index.html?embed=1&selected=&rotate=1&width=600&height=500';
+        this.url = "about:blank";
+      }
+
+      static styles = css`
+        .iframe-container {
+          width: 600px;
+          height: 500px;
+          overflow: hidden;
+          border: none;
+          scrollbar-width: none;
+          /* Firefox */
+          -ms-overflow-style: none;
+          /* IE 10+ */
+        }
+        .iframe-inner {
+          width: 600px;
+          height: 500px;
+          border: none;
+          overflow: hidden;
+        }
+
+      `;
+
+      connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener('update-data', this.updateUrl.bind(this));
+      }
+
+      updateUrl(e) {
+        const data = e.detail;
+        const planet = data.planet || 'unknown';
+        const iconsData = encodeURIComponent(JSON.stringify(data.icons || []));
+        this.url = `${this.urlBase}&icons=${iconsData}&planet=${planet}`;
+      }
+
+      render() {
+        return html`
+          <div class="iframe-container">
+            <iframe class="iframe-inner" src="${this.url}"></iframe>
+          </div>
+        `;
+      }
+    }
+
+    customElements.define('iframe-display', IframeDisplay);
+
+    class ActionPanel extends LitElement {
+      static properties = {
+        x: 0,
+        y: 0,
+        z: 0,
+      };
+      static styles = css`
+        input{
+          width: 6em;
+        }
+      `;
+
+      connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener('update-data', this.onFileLoad.bind(this));
+      }
+
+      onFileLoad(e) {
+        const humans = e.detail.humans;
+        console.log("Humans:", humans);
+        if (!humans || humans.length === 0) return;
+        const pos = humans[0].world_position;
+        this.x = pos.x;
+        this.y = pos.y;
+        this.z = pos.z;
+        this.requestUpdate();
+      }
+
+      handleInput(e, coord) {
+        this[coord] = parseFloat(e.target.value);
+      }
+
+      async heal() {
+        const pyodide = await pyodideReadyPromise;
+        pyodide.runPython("data.heal_players()");
+        updateData();
+      }
+
+      async movePlayer() {
+        // change cursor to loading
+        const pyodide = await pyodideReadyPromise;
+        pyodide.runPython("data.move_player")(this.x, this.y, this.z);
+        updateData();
+      }
+      render() {
+        return html`
+    <div class="actions">
+      <h3>Actions</h3>
+      <button @click=${this.heal}>Heal Players</button>
+      <br /><br />
+
+      <label>Move player to:</label>
+      <input
+        type="number"
+        placeholder="X"
+        .value=${this.x}
+        @input=${e => this.handleInput(e, 'x')}
+      />
+      <input
+        type="number"
+        placeholder="Y"
+        .value=${this.y}
+        @input=${e => this.handleInput(e, 'y')}
+      />
+      <input
+        type="number"
+        placeholder="Z"
+        .value=${this.z}
+        @input=${e => this.handleInput(e, 'z')}
+      />
+      <button @click=${this.movePlayer}>Move</button>
+      <br /><br />
+      <button @click=${downloadData}>Download Modified Save</button>
+    </div>
+  `;
+      }
+
+    }
+
+    customElements.define('action-panel', ActionPanel);
+  </script>
+
+</body>
+
+</html>
