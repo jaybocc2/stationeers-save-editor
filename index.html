@@ -29,7 +29,7 @@
     }
 
     .right-column {
-      width: 520px;
+      width: 600px;
       /* iframe is 500px wide + padding/margin */
       display: flex;
       flex-direction: column;
@@ -42,6 +42,10 @@
 
     iframe-display {
       display: block;
+    }
+
+    h3 {
+      margin-top: 0;
     }
 
     .info,
@@ -61,13 +65,27 @@
       width: 80px;
       margin-right: 10px;
     }
+
+    button {
+      padding: 6px 10px;
+      font-size: 0.9em;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
   </style>
 
 <body>
   <div class="container">
     <div class="left-column">
       <file-uploader></file-uploader>
-      <save-info></save-info>
+      <save-info class="info"></save-info>
     </div>
 
     <div class="right-column">
@@ -96,6 +114,7 @@
       div.style.alignItems = 'center';
       div.style.justifyContent = 'center';
       div.style.fontSize = '1.5em';
+      div.style.zIndex = '1000';
       div.innerText = msg;
       document.body.appendChild(div);
       return () => document.body.removeChild(div);
@@ -171,7 +190,6 @@
           this.pyodideReady = true;
         });
       }
-
       render() {
         return html`
       <div
@@ -221,7 +239,9 @@ data = SaveData("${file.name}")
       updateInfo(e) {
         this.info = e.detail.info_html;
       }
-
+      createRenderRoot() {
+        return this;
+      }
       render() {
         if (!this.info) return html`No save file loaded.`;
         return unsafeHTML(this.info);
@@ -242,23 +262,43 @@ data = SaveData("${file.name}")
       }
 
       static styles = css`
-        .iframe-container {
-          width: 600px;
-          height: 600px;
-          overflow: hidden;
-          border: none;
-          scrollbar-width: none;
-          /* Firefox */
-          -ms-overflow-style: none;
-          /* IE 10+ */
-        }
-        .iframe-inner {
-          width: 600px;
-          height: 600px;
-          border: none;
-          overflow: hidden;
-        }
+     .iframe-container {
+      position: relative;
+      width: 600px;
+      height: 600px;
+      margin: 0;
+      padding: 0;
+      border: none;
+      overflow: hidden;
+    }
 
+    .iframe-inner {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 600px;
+      height: 600px;
+      display: block;
+      border: none;
+    }
+
+    .open-map-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+      padding: 6px 10px;
+      font-size: 0.9em;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .open-map-button:hover {
+      background-color: #0056b3;
+    }
       `;
 
       connectedCallback() {
@@ -271,14 +311,22 @@ data = SaveData("${file.name}")
         const planet = data.planet || 'unknown';
         const iconsData = encodeURIComponent(JSON.stringify(data.icons || []));
         this.url = `${this.urlBase}&icons=${iconsData}&planet=${planet}`;
+
+      }
+
+      openInNewTab() {
+        window.open(this.url.replace('embed=1&', ''), '_blank');
       }
 
       render() {
         return html`
-          <div class="iframe-container">
-            <iframe class="iframe-inner" src="${this.url}"></iframe>
-          </div>
-        `;
+      <div class="iframe-container">
+        <iframe class="iframe-inner" src="${this.url}"></iframe>
+        <button class="open-map-button" @click=${this.openInNewTab}>
+          Open Full Map
+        </button>
+      </div>
+    `;
       }
     }
 
@@ -328,6 +376,9 @@ data = SaveData("${file.name}")
         pyodide.runPython("data.move_player")(this.x, this.y, this.z);
         updateData();
       }
+      createRenderRoot() {
+        return this;
+      }
       render() {
         return html`
     <div class="actions">
@@ -356,7 +407,9 @@ data = SaveData("${file.name}")
       />
       <button @click=${this.movePlayer}>Move</button>
       <br /><br />
-      <button @click=${downloadData}>Download Modified Save</button>
+      <div style="text-align: right;">
+        <button @click=${downloadData}>Download Modified Save</button>
+      </div>
     </div>
   `;
       }

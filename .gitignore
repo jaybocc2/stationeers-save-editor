@@ -6,4 +6,4 @@ dist
 *.whl
 *.xml
 *.asm
-src/stationeers_save_editor/_version.py
+stationeers_save_editor/_version.py
