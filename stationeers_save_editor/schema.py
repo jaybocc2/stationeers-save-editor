@@ -19425,6 +19425,31 @@ class DeviceInputOutputImportSaveData(DeviceAtmosphericSaveData):
 
 
 @dataclass
+class DebugMotherboardSaveData(MotherboardSaveData):
+    selected_holder_index: Optional[int] = field(
+        default=0,
+        metadata={
+            "name": "SelectedHolderIndex",
+            "type": "Element",
+        },
+    )
+    stepping_enabled: Optional[bool] = field(
+        default=False,
+        metadata={
+            "name": "SteppingEnabled",
+            "type": "Element",
+        },
+    )
+    debug_mode_enabled: Optional[bool] = field(
+        default=False,
+        metadata={
+            "name": "DebugModeEnabled",
+            "type": "Element",
+        },
+    )
+
+
+@dataclass
 class DiscoverSiteData(SpaceMapNodeActionData):
     site: list[SpaceMapNodeData] = field(
         default_factory=list,
